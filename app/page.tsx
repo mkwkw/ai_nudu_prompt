@@ -29,29 +29,29 @@ export default function Home() {
         </div>
 
         {/* Features Section */}
-        <div className="grid md:grid-cols-3 gap-8 mb-16">
-          <Card>
+        <div className="grid md:grid-cols-3 gap-8 mb-16 max-w-6xl mx-auto">
+          <Card className="text-center">
             <CardHeader>
-              <CardTitle>🎯 역할 기반 추천</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-center">🎯 역할 기반 추천</CardTitle>
+              <CardDescription className="text-center">
                 기획자, 개발자, 분석가 등 역할에 맞는 <br/> 최적의 프롬프트 템플릿을 자동으로 추천
               </CardDescription>
             </CardHeader>
           </Card>
           
-          <Card>
+          <Card className="text-center">
             <CardHeader>
-              <CardTitle>⚡ 실시간 미리보기</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-center">⚡ 실시간 미리보기</CardTitle>
+              <CardDescription className="text-center">
                 프롬프트 작성과 동시에 결과를 미리보기하고 <br/> 토큰 수와 비용을 실시간으로 확인
               </CardDescription>
             </CardHeader>
           </Card>
           
-          <Card>
+          <Card className="text-center">
             <CardHeader>
-              <CardTitle>🤝 협업 & 공유</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-center">🤝 협업 & 공유</CardTitle>
+              <CardDescription className="text-center">
                 팀 내 Best Practice를 갤러리에 공유하고 <br/> 동료들과 함께 프롬프트를 개선
               </CardDescription>
             </CardHeader>
@@ -69,7 +69,7 @@ export default function Home() {
                     <span className="text-2xl">📝</span>
                   </div>
                   <h3 className="font-semibold mb-2">새내기 기획자</h3>
-                  <p className="text-sm text-gray-600">마케팅 카피를 빠르게 뽑고 싶은 분</p>
+                  <p className="text-sm text-gray-900">마케팅 카피를 빠르게 뽑고 싶은 분</p>
                 </div>
               </CardContent>
             </Card>
@@ -81,7 +81,7 @@ export default function Home() {
                     <span className="text-2xl">💻</span>
                   </div>
                   <h3 className="font-semibold mb-2">개발자</h3>
-                  <p className="text-sm text-gray-600">API 자동화를 위한 변수·버전 관리</p>
+                  <p className="text-sm text-gray-900">API 자동화를 위한 변수·버전 관리</p>
                 </div>
               </CardContent>
             </Card>
@@ -93,7 +93,7 @@ export default function Home() {
                     <span className="text-2xl">📊</span>
                   </div>
                   <h3 className="font-semibold mb-2">데이터 분석가</h3>
-                  <p className="text-sm text-gray-600">반복 레포트 작성용 템플릿</p>
+                  <p className="text-sm text-gray-900">반복 레포트 작성용 템플릿</p>
                 </div>
               </CardContent>
             </Card>
@@ -105,7 +105,7 @@ export default function Home() {
                     <span className="text-2xl">📋</span>
                   </div>
                   <h3 className="font-semibold mb-2">PM</h3>
-                  <p className="text-sm text-gray-600">일정관리, 비용관리, 회의 요약 자동화</p>
+                  <p className="text-sm text-gray-900">일정관리, 비용관리, 회의 요약 자동화</p>
                 </div>
               </CardContent>
             </Card>
