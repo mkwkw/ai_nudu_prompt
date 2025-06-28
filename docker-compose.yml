@@ -11,6 +11,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://user:password@postgres:5432/mydatabase
       - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY} 
 
   postgres:
     image: postgres:15-alpine
