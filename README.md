@@ -2,6 +2,14 @@
 
 AI 프롬프트 생성 및 실행 서비스
 
+![image](https://github.com/user-attachments/assets/412379f1-354d-41fb-88f4-615ff0373302)
+
+![image](https://github.com/user-attachments/assets/a019df5c-cd6a-426a-94cf-b43e37c3cdb5)
+![image](https://github.com/user-attachments/assets/e1ce6161-e668-4612-ba93-00ffbb676b04)
+![image](https://github.com/user-attachments/assets/c7960fd8-213c-4378-9c3c-02b0d96e1125)
+
+
+
 ## 🚀 주요 기능
 
 - **역할 기반 프롬프트 생성**: 기획자, 개발자, 데이터 분석가, PM 역할별 최적화된 프롬프트
