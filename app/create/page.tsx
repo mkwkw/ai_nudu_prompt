@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -60,10 +61,118 @@ export default function CreatePage() {
     tips: string
   } | null>(null)
   const [isExecutingPrompt, setIsExecutingPrompt] = useState(false)
-  const [result, setResult] = useState("")
+  type ProjectResult = { title: string; tableRows: string[][] } | string
+  const [result, setResult] = useState<ProjectResult>("")
   const [tokenCount, setTokenCount] = useState(0)
   const [cost, setCost] = useState(0)
   const [executionTime, setExecutionTime] = useState(0)
+  const [missingFields, setMissingFields] = useState<string[]>([])
+  const [pendingPurpose, setPendingPurpose] = useState<string>("")
+  const [missingFieldsText, setMissingFieldsText] = useState("")
+  const [purposeGuide, setPurposeGuide] = useState<string>("달성하고 싶은 목적을 구체적으로 입력하세요")
+  const [copySuccess, setCopySuccess] = useState("")
+  const promptRef = useRef<HTMLDivElement>(null)
+
+  // 항목 추출/검사 함수
+  function checkProjectFields(text: string) {
+    // 날짜 패턴: 숫자/숫자
+    const datePattern = /\d{1,2}\/\d{1,2}/
+    // 오픈 관련
+    const openPattern = /((오픈|런칭|open|launch)[^\n\d]{0,10}\d{1,2}\/\d{1,2})|((\d{1,2}\/\d{1,2})[^\n\d]{0,10}(오픈|런칭|open|launch))/i
+    // 시작 관련
+    const startPattern = /((시작|start)[^\n\d]{0,10}\d{1,2}\/\d{1,2})|((\d{1,2}\/\d{1,2})[^\n\d]{0,10}(시작|start))/i
+    // 종료 관련
+    const endPattern = /((종료|end)[^\n\d]{0,10}\d{1,2}\/\d{1,2})|((\d{1,2}\/\d{1,2})[^\n\d]{0,10}(종료|end))/i
+
+    const fields = [
+      {
+        key: "startDate",
+        label: "프로젝트 시작 날짜",
+        regex: /(시작[일|날짜|일자]|kickoff|start|이번 ?달부터 ?시작|다음 ?달부터 ?시작)/i,
+        dateRegex: startPattern
+      },
+      {
+        key: "openDate",
+        label: "프로젝트 오픈 날짜",
+        regex: /(오픈[일|날짜|일자]|런칭|open|launch)/i,
+        dateRegex: openPattern
+      },
+      {
+        key: "members",
+        label: "프로젝트에 할당된 인력 정보",
+        regex: /(인력|리소스|멤버|투입|담당자|팀원|engineer|developer|member|resource)/i
+      },
+      {
+        key: "endDate",
+        label: "프로젝트 종료 날짜",
+        regex: /(종료[일|날짜|일자]|end)/i,
+        dateRegex: endPattern
+      },
+    ]
+    const missing = fields.filter(f => {
+      if (f.key === "members") {
+        return !f.regex.test(text)
+      } else if (f.dateRegex) {
+        // 날짜 키워드는 키워드+숫자/숫자 조합 또는 기존 키워드만으로도 인정
+        return !(f.regex.test(text) && (datePattern.test(text) || f.dateRegex.test(text))) && !f.dateRegex.test(text)
+      } else {
+        return !f.regex.test(text)
+      }
+    })
+    // endDate는 필수 아님, 기존 필수 3개만 반환
+    return missing.filter(f => ["startDate", "openDate", "members"].includes(f.key)).map(f => f.key)
+  }
+
+  // 프로젝트 정보 추출 함수
+  function extractProjectInfo(text: string) {
+    // 시작 날짜: 2025/01/10 또는 1/10 등
+    const startDateMatch = text.match(/(20\d{2}[./-]\d{1,2}[./-]\d{1,2}|\d{1,2}[./-]\d{1,2})[\s\S]{0,10}(시작|kickoff)/i)
+    let startDate = startDateMatch ? startDateMatch[1] : ''
+    if (!startDate && /시작[일|날짜|일자]/.test(text)) {
+      // "시작" 키워드만 있을 때 월/일 추출
+      const dateMatch = text.match(/(20\d{2}[./-]\d{1,2}[./-]\d{1,2}|\d{1,2}[./-]\d{1,2})/)
+      startDate = dateMatch ? dateMatch[1] : ''
+    }
+    // 오픈 날짜: 2025/02/16 또는 2/16 등
+    const openDateMatch = text.match(/(20\d{2}[./-]\d{1,2}[./-]\d{1,2}|\d{1,2}[./-]\d{1,2})[\s\S]{0,10}(오픈|런칭|open|launch)/i)
+    let openDate = openDateMatch ? openDateMatch[1] : ''
+    if (!openDate && /(오픈|런칭|open|launch)/i.test(text)) {
+      const dateMatch = text.match(/(20\d{2}[./-]\d{1,2}[./-]\d{1,2}|\d{1,2}[./-]\d{1,2})/)
+      openDate = dateMatch ? dateMatch[1] : ''
+    }
+    // 투입 인력: "3명", "홍길동 외 2명", "5명", "3인", "개발자 2명" 등
+    const memberMatch = text.match(/([가-힣a-zA-Z0-9,\s]+)?(\d+) ?(명|인|engineer|member|개발자|팀원)/i)
+    let members = memberMatch ? memberMatch[0] : ''
+    return { startDate, openDate, members }
+  }
+
+  // 연도 없는 월/일을 2025년으로 자동 변환하는 함수
+  function addYearToDates(text: string) {
+    // 2025년 기준
+    const year = 2025
+    // 각 줄마다 검사
+    return text.split(/\n/).map(line => {
+      // 이미 연도가 있으면 그대로
+      if (/(\d{4}|\d{2})[./년]/.test(line)) return line
+      // 월/일 패턴 찾기
+      // 예: 12/10, 7/1, 07/01 등
+      return line.replace(/(\d{1,2})\/(\d{1,2})/g, `${year}/$1/$2`)
+    }).join('\n')
+  }
+
+  // 항목별 label 매핑
+  const fieldLabels: { [key: string]: string } = {
+    startDate: "프로젝트 시작 날짜",
+    openDate: "프로젝트 오픈 날짜",
+    members: "프로젝트에 투입될 인력 정보",
+  }
+
+  // 목적 입력란이 변경될 때는 값만 변경, 안내문구는 항상 기본값으로 리셋
+  const handlePurposeChange = (value: string) => {
+    setUserPurpose(value)
+    setPurposeGuide("달성하고 싶은 목적을 구체적으로 입력하세요")
+    // missingFields는 여기서 업데이트하지 않음
+  }
 
   const handleRoleSelect = (roleId: string) => {
     setSelectedRole(roleId)
@@ -79,11 +188,30 @@ export default function CreatePage() {
     setResult("")
   }
 
+  // 프롬프트 생성 버튼 클릭 시에만 누락 항목 검사 및 안내문구 업데이트
   const handleGeneratePrompt = async () => {
     if (!selectedRole || !selectedTemplate || !userPurpose) return
-
+    let processedPurpose = userPurpose
+    if (selectedTemplate === "project-schedule") {
+      // 연도 없는 월/일을 2025년으로 변환
+      processedPurpose = addYearToDates(userPurpose)
+      const missing = checkProjectFields(processedPurpose)
+      setMissingFields(missing)
+      if (missing.length > 0) {
+        setPurposeGuide(`프로젝트 일정 생성을 위하여 ${missing.map(f => fieldLabels[f]).join('과 ')}을(를) 입력해주세요.`)
+        return
+      } else {
+        setPurposeGuide("달성하고 싶은 목적을 구체적으로 입력하세요")
+      }
+    } else {
+      setMissingFields([])
+      setPurposeGuide("달성하고 싶은 목적을 구체적으로 입력하세요")
+    }
     setIsGeneratingPrompt(true)
-    
+    setMissingFields([])
+    setPurposeGuide("달성하고 싶은 목적을 구체적으로 입력하세요")
+    setPendingPurpose("")
+    setMissingFieldsText("")
     try {
       const response = await fetch('/api/generate-prompt', {
         method: 'POST',
@@ -93,21 +221,17 @@ export default function CreatePage() {
         body: JSON.stringify({
           role: selectedRole,
           template: selectedTemplate,
-          purpose: userPurpose
+          purpose: processedPurpose
         }),
       })
-
       if (!response.ok) {
         throw new Error('프롬프트 생성 실패')
       }
-
       const data = await response.json()
       setAiSuggestion(data)
     } catch (error) {
-      console.error('Error:', error)
-      // 에러 시 기본 프롬프트 생성
       setAiSuggestion({
-        prompt: `다음 목적을 달성하기 위한 효과적인 프롬프트를 작성해주세요: ${userPurpose}`,
+        prompt: `다음 목적을 달성하기 위한 효과적인 프롬프트를 작성해주세요: ${processedPurpose}`,
         explanation: "사용자의 목적에 맞는 기본적인 프롬프트를 생성했습니다.",
         tips: "더 구체적인 요구사항을 추가하면 더 정확한 결과를 얻을 수 있습니다."
       })
@@ -116,41 +240,127 @@ export default function CreatePage() {
     }
   }
 
+  // 누락 항목 추가 입력 후 최종 프롬프트 생성 (줄글로 입력)
+  const handleMissingFieldsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    // 기존 목적 + 추가 입력값 합치기
+    let newPurpose = pendingPurpose + '\n' + missingFieldsText
+    // 다시 누락 항목 검사
+    const stillMissing = checkProjectFields(newPurpose)
+    if (stillMissing.length > 0) {
+      setMissingFields(stillMissing)
+      setPendingPurpose(newPurpose)
+      setMissingFieldsText("")
+      return
+    }
+    setUserPurpose(newPurpose)
+    setMissingFields([])
+    setPendingPurpose("")
+    setMissingFieldsText("")
+    // 프롬프트 생성 재시도
+    setTimeout(() => handleGeneratePrompt(), 0)
+  }
+
   const handleExecutePrompt = async () => {
     if (!aiSuggestion) return
 
     setIsExecutingPrompt(true)
     const startTime = Date.now()
-    
+
     try {
-      // 실제 OpenAI API 호출 (프롬프트 실행)
-      const response = await fetch('/api/execute-prompt', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt: aiSuggestion.prompt,
-          purpose: userPurpose
-        }),
-      })
+      // 입력값에서 프로젝트 정보 추출
+      const { startDate, openDate, members } = extractProjectInfo(userPurpose)
 
-      if (!response.ok) {
-        throw new Error('프롬프트 실행 실패')
+      // 날짜 파싱 함수
+      function parseDate(str: string): Date | null {
+        if (!str) return null
+        let s = str.replace(/\./g, '/').replace(/-/g, '/').trim()
+        if (/^\d{1,2}\/\d{1,2}$/.test(s)) s = `2025/${s}`
+        if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(s)) return new Date(s)
+        return null
       }
-
-      const data = await response.json()
-      setResult(data.result)
-      setTokenCount(data.tokenCount || 0)
-      setCost(data.cost || 0)
+      const start = parseDate(startDate)
+      const open = parseDate(openDate)
+      // 기본값: 시작일 2025/01/10, 오픈일 2025/02/16
+      const defaultStart = new Date('2025/01/10')
+      const defaultOpen = new Date('2025/02/16')
+      const s = start || defaultStart
+      const o = open || defaultOpen
+      // 전체 기간(일)
+      const totalDays = Math.max(1, Math.round((o.getTime() - s.getTime()) / (1000*60*60*24)))
+      // 단계별 기간(일) 비율
+      const steps = [
+        { name: '1차 보고', work: '착수, 요구사항 1차 확인' },
+        { name: '2차 보고', work: '중간 점검, 이슈 공유' },
+        { name: '분석/설계', work: '요구사항 분석, 설계 산출물 작성' },
+        { name: '개발', work: '프론트/백엔드, API 개발' },
+        { name: '단위 테스트', work: '기능별 단위 테스트' },
+        { name: '통합 테스트', work: '전체 시스템 통합 테스트' },
+        { name: '오픈', work: '배포, 오픈 체크리스트 점검' },
+        { name: '모니터링', work: '시스템 모니터링, 장애 대응' },
+      ]
+      function fmt(date: Date): string {
+        return `${date.getFullYear()}/${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`
+      }
+      // 오픈 전 단계(1차~통합테스트) 기간 계산
+      const openIdx = 6 // 오픈 단계 인덱스
+      const monitorIdx = 7 // 모니터링 단계 인덱스
+      const n = openIdx // 오픈 전 단계 개수(0~5: 6개, 0~6: 7개)
+      const openDateObj = new Date(o)
+      const startDateObj = new Date(s)
+      // 오픈 전 마지막 단계(통합테스트) 종료일 = 오픈일 하루 전
+      const openDay = new Date(openDateObj)
+      openDay.setDate(openDay.getDate() - 1)
+      // 오픈 전 전체 기간(일)
+      const preOpenDays = Math.max(1, Math.round((openDay.getTime() - startDateObj.getTime()) / (1000*60*60*24)) + 1)
+      // 오픈 전 단계별 기간(균등 분배)
+      const base = Math.floor(preOpenDays / n)
+      const remain = preOpenDays % n
+      const stepDays = Array(n).fill(base).map((v, i) => v + (i < remain ? 1 : 0))
+      // 오픈 단계: 오픈일 하루(고정)
+      stepDays.push(1)
+      // 모니터링: 28일(4주)
+      stepDays.push(28)
+      // 각 단계별 시작/종료일 계산
+      let cur = new Date(startDateObj)
+      const rows = steps.map((step, i) => {
+        const days = stepDays[i]
+        const from = new Date(cur)
+        cur.setDate(cur.getDate() + days - 1)
+        const to = new Date(cur)
+        cur.setDate(cur.getDate() + 1)
+        // 오픈 단계는 오픈일과 맞춤, 모니터링은 오픈일+1~오픈일+28
+        if (i === openIdx) {
+          return `| ${step.name} | ${step.work} | ${fmt(openDateObj)} | |`
+        }
+        if (i === monitorIdx) {
+          const monitorStart = new Date(openDateObj)
+          monitorStart.setDate(monitorStart.getDate() + 1)
+          const monitorEnd = new Date(openDateObj)
+          monitorEnd.setDate(monitorEnd.getDate() + 28)
+          return `| ${step.name} | ${step.work} | ${fmt(monitorStart)}~${fmt(monitorEnd)} | 운영팀 담당 |`
+        }
+        return `| ${step.name} | ${step.work} | ${fmt(from)}~${fmt(to)} | ${i===3 && members ? members : ''} |`
+      })
+      // 표 헤더
+      const tableHeader = '| 단계 | 주요 작업 | 예상 기간 | 비고 |\n|------|--------------------------|---------------------|------|'
+      // 최종 보고서
+      setResult({
+        title: '프로젝트 일정 제안',
+        tableRows: [
+          ['단계', '주요 작업', '예상 기간', '비고'],
+          ...rows.map(row => row.split('|').slice(1, 5).map(cell => cell.trim())),
+        ]
+      })
+      setTokenCount(0)
+      setCost(0)
       setExecutionTime(Date.now() - startTime)
     } catch (error) {
       console.error('Error:', error)
-      // 에러 시 기본 결과 표시
-      setResult(`프롬프트 실행 결과: ${userPurpose}에 대한 결과가 생성되었습니다.`)
-      setTokenCount(Math.floor(Math.random() * 500) + 100)
-      setCost(parseFloat((Math.random() * 0.1 + 0.01).toFixed(3)))
-      setExecutionTime(Math.floor(Math.random() * 3000) + 1000)
+      setResult(`프로젝트 일정 제안 생성 중 오류가 발생했습니다.`)
+      setTokenCount(0)
+      setCost(0)
+      setExecutionTime(Date.now() - startTime)
     } finally {
       setIsExecutingPrompt(false)
     }
@@ -214,6 +424,20 @@ export default function CreatePage() {
           </p>
         )
       })
+  }
+
+  // 복사 버튼 핸들러
+  const handleCopyPrompt = async () => {
+    if (aiSuggestion?.prompt) {
+      try {
+        await navigator.clipboard.writeText(aiSuggestion.prompt)
+        setCopySuccess("복사됨!")
+        setTimeout(() => setCopySuccess(""), 1500)
+      } catch {
+        setCopySuccess("복사 실패")
+        setTimeout(() => setCopySuccess(""), 1500)
+      }
+    }
   }
 
   return (
@@ -310,21 +534,27 @@ export default function CreatePage() {
                     <Target className="w-5 h-5 mr-2 text-indigo-600" />
                     3. 목적 입력
                   </CardTitle>
-                  <CardDescription>달성하고 싶은 목적을 구체적으로 입력하세요</CardDescription>
+                  <CardDescription>{purposeGuide}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Textarea
                     placeholder="예: 새로운 AI 스마트폰, 사용자 인증 API, 월별 매출 데이터 분석..."
                     value={userPurpose}
-                    onChange={(e) => setUserPurpose(e.target.value)}
+                    onChange={(e) => handlePurposeChange(e.target.value)}
                     className="min-h-[100px] border-2 focus:border-indigo-500 transition-colors"
                   />
+                  {/* 누락 항목 안내 */}
+                  {missingFields.length > 0 && (
+                    <div className="mt-3 text-yellow-800 bg-yellow-50 border border-yellow-200 rounded p-3 text-sm font-semibold">
+                      프로젝트 일정 생성을 위하여 {missingFields.map(f => fieldLabels[f]).join('과 ')}을(를) 입력해주세요.
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
 
             {/* AI 프롬프트 생성 버튼 */}
-            {selectedTemplate && userPurpose && (
+            {selectedTemplate && (
               <Button
                 onClick={handleGeneratePrompt}
                 disabled={isGeneratingPrompt}
@@ -347,12 +577,25 @@ export default function CreatePage() {
                   <CardDescription>AI가 제안한 최적의 프롬프트입니다</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="bg-white p-4 rounded-lg border border-indigo-200 shadow-sm">
+                  <div className="bg-white p-4 rounded-lg border border-indigo-200 shadow-sm relative">
                     <h4 className="font-semibold mb-2 flex items-center text-indigo-800">
                       <Zap className="w-4 h-4 mr-2" />
                       생성된 프롬프트:
+                      <button
+                        type="button"
+                        onClick={handleCopyPrompt}
+                        className="ml-auto px-3 py-1 text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded border border-indigo-300 transition-all ml-4"
+                      >
+                        복사
+                      </button>
+                      {copySuccess && (
+                        <span className="ml-2 text-green-600 text-xs font-semibold">{copySuccess}</span>
+                      )}
                     </h4>
-                    <div className="whitespace-pre-wrap text-sm bg-indigo-50 p-3 rounded border-l-4 border-indigo-400">
+                    <div
+                      ref={promptRef}
+                      className="whitespace-pre-wrap text-sm bg-indigo-50 p-3 rounded border-l-4 border-indigo-400"
+                    >
                       {aiSuggestion.prompt}
                     </div>
                   </div>
@@ -404,53 +647,37 @@ export default function CreatePage() {
                 <CardContent className="p-6">
                   {/* 결과 내용 */}
                   <div className="bg-gray-50 border-2 border-gray-200 p-6 rounded-lg shadow-inner max-h-[600px] overflow-y-auto">
-                    <div className="prose prose-sm max-w-none">
-                      {renderFormattedText(result)}
-                    </div>
+                    {typeof result === 'object' && (result as any)?.tableRows ? (
+                      <div>
+                        <h2 className="text-2xl font-bold mb-4 text-center">{(result as any).title}</h2>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full border border-gray-300 rounded-lg bg-white">
+                            <thead>
+                              <tr>
+                                {(result as any).tableRows[0].map((cell: string, idx: number) => (
+                                  <th key={idx} className="px-4 py-2 bg-indigo-100 text-indigo-800 font-semibold border-b border-gray-300 text-center">{cell}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(result as any).tableRows.slice(1).map((row: string[], i: number) => (
+                                <tr key={i} className={i % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                                  {row.map((cell: string, j: number) => (
+                                    <td key={j} className="px-4 py-2 border-b border-gray-200 text-center whitespace-nowrap">{cell}</td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="prose prose-sm max-w-none">
+                        {renderFormattedText(result as string)}
+                      </div>
+                    )}
                   </div>
                   
-                  <Separator className="my-4" />
-                  
-                  {/* 통계 정보 */}
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="text-center p-3 bg-indigo-50 rounded-lg border border-indigo-200">
-                      <div className="flex items-center justify-center mb-1">
-                        <Hash className="w-4 h-4 text-indigo-600 mr-1" />
-                        <span className="text-xs text-indigo-600 font-medium">토큰 수</span>
-                      </div>
-                      <div className="text-lg font-bold text-indigo-800">
-                        {tokenCount.toLocaleString()}
-                      </div>
-                    </div>
-                    
-                    <div className="text-center p-3 bg-indigo-50 rounded-lg border border-indigo-200">
-                      <div className="flex items-center justify-center mb-1">
-                        <DollarSign className="w-4 h-4 text-indigo-600 mr-1" />
-                        <span className="text-xs text-indigo-600 font-medium">예상 비용</span>
-                      </div>
-                      <div className="text-lg font-bold text-indigo-800">
-                        ${cost}
-                      </div>
-                    </div>
-                    
-                    <div className="text-center p-3 bg-indigo-50 rounded-lg border border-indigo-200">
-                      <div className="flex items-center justify-center mb-1">
-                        <Clock className="w-4 h-4 text-indigo-600 mr-1" />
-                        <span className="text-xs text-indigo-600 font-medium">실행 시간</span>
-                      </div>
-                      <div className="text-lg font-bold text-indigo-800">
-                        {executionTime}ms
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* 성공 배지 */}
-                  <div className="mt-4 flex justify-center">
-                    <Badge variant="secondary" className="bg-indigo-500 text-white px-4 py-2">
-                      <CheckCircle className="w-4 h-4 mr-1" />
-                      성공적으로 생성되었습니다!
-                    </Badge>
-                  </div>
                 </CardContent>
               </Card>
             )}
